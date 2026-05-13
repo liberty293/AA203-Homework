@@ -18,7 +18,7 @@ mc = 10.0  # cart mass
 L = 1.0  # pendulum length
 g = 9.81  # gravitational acceleration
 dt = 0.1  # discretization time step
-animate = False  # whether or not to animate results
+animate = True  # whether or not to animate results
 
 
 def cartpole(s: np.ndarray, u: np.ndarray) -> np.ndarray:
@@ -60,7 +60,8 @@ def reference(t: float) -> np.ndarray:
 
     # PART (d) ##################################################
     # INSTRUCTIONS: Compute the reference state for a given time
-    raise NotImplementedError()
+    s = np.array([a * np.sin(2 * np.pi * t / T), np.pi, 0.0, 0.0])
+    return s
     # END PART (d) ##############################################
 
 
@@ -85,8 +86,12 @@ def ricatti_recursion(
     for i in range(max_iters):
         # PART (b) ##################################################
         # INSTRUCTIONS: Apply the Ricatti equation until convergence
-        K = NotImplemented
-        raise NotImplementedError()
+        K = -np.linalg.inv(R + B.T @ P_prev @ B) @ B.T @ P_prev @ A
+        P = Q + A.T @ P_prev @ (A + B @ K)
+        if np.linalg.norm(P - P_prev) < eps:
+            converged = True
+            break
+        P_prev = P
         # END PART (b) ##############################################
     if not converged:
         raise RuntimeError("Ricatti recursion did not converge!")
@@ -119,9 +124,14 @@ def simulate(
     # PART (c) ##################################################
     # INSTRUCTIONS: Complete the function to simulate the cartpole system
     # Hint: use the cartpole wrapper above with odeint
-    s = NotImplemented
-    u = NotImplemented
-    raise NotImplementedError()
+    s = np.zeros((t.size, n))
+    u = np.zeros((t.size, m))
+    s[0] = s0
+    for i in range(t.size - 1):
+        u[i] = K @ (s[i] - s_ref[i])
+        s[i + 1] = odeint(cartpole_wrapper, s[i], t[i:i + 2], (u[i],))[1]
+    u[-1] = K @ (s[-1] - s_ref[-1])
+        
     # END PART (c) ##############################################
     return s, u
 
@@ -136,8 +146,8 @@ def compute_lti_matrices() -> tuple[np.ndarray, np.ndarray]:
     """
     # PART (a) ##################################################
     # INSTRUCTIONS: Construct the A and B matrices
-    A = NotImplemented
-    B = NotImplemented
+    A = np.eye(4) + dt*np.array([[0, 0, 1, 0], [0, 0, 0, 1], [0, mp*g/mc, 0, 0], [0, (mc+mp)*g/(mc*L), 0, 0]])
+    B = dt * np.array([[0], [0], [1/mc], [1/(mc*L)]])
     # END PART (a) ##############################################
     return A, B
 

@@ -47,7 +47,8 @@ def affinize(f, s, u):
     """
     # PART (b) ################################################################
     # INSTRUCTIONS: Use JAX to affinize `f` around `(s, u)` in two lines.
-    raise NotImplementedError()
+    A, B = jax.jacobian(f, argnums=(0, 1))(s, u)
+    c = f(s, u) - A @ s - B @ u
     # END PART (b) ############################################################
     return A, B, c
 
@@ -170,9 +171,20 @@ def scp_iteration(f, s0, s_goal, s_prev, u_prev, N, P, Q, R, u_max, ρ):
 
     # PART (c) ################################################################
     # INSTRUCTIONS: Construct the convex SCP sub-problem.
-    objective = 0.0
+    objective = cvx.sum(
+            cvx.quad_form(s_cvx[k] - s_goal, Q)
+            + cvx.quad_form(u_cvx[k], R)
+            for k in range(N)
+        ) + cvx.quad_form(s_cvx[N] - s_goal, P)
     constraints = []
-    raise NotImplementedError()
+    constraints += [s_cvx[0] == s0]
+    for k in range(N):
+        constraints += [s_cvx[k + 1] == A[k] @ s_cvx[k] + B[k] @ u_cvx[k] + c[k]]
+        constraints += [cvx.abs(u_cvx[k]) <= u_max]
+        constraints += [cvx.norm_inf(u_cvx[k] - u_prev[k]) <= ρ]
+        constraints += [cvx.norm_inf(s_cvx[k] - s_prev[k]) <= ρ]
+    constraints += [cvx.norm_inf(s_cvx[N] - s_prev[N]) <= ρ]
+    
     # END PART (c) ############################################################
 
     prob = cvx.Problem(cvx.Minimize(objective), constraints)
@@ -234,7 +246,7 @@ R = 1e-3 * np.eye(m)  # control cost matrix
 u_max = 8.0  # control effort bound
 eps = 5e-1  # convergence tolerance
 max_iters = 100  # maximum number of SCP iterations
-animate = False  # flag for animation
+animate = True  # flag for animation
 
 # Initialize the discrete-time dynamics
 fd = jax.jit(discretize(cartpole, dt))

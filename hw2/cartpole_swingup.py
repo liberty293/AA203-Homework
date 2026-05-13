@@ -4,6 +4,7 @@ Starter code for the problem "Cart-pole swing-up".
 Autonomous Systems Lab (ASL), Stanford University
 """
 
+from ctypes import sizeof
 import time
 
 from animations import animate_cartpole
@@ -39,7 +40,7 @@ def linearize(f, s, u):
     """
     # WRITE YOUR CODE BELOW ###################################################
     # INSTRUCTIONS: Use JAX to compute `A` and `B` in one line.
-    raise NotImplementedError()
+    A, B = jax.jacobian(f, argnums=(0, 1))(s, u)
     ###########################################################################
     return A, B
 
@@ -112,7 +113,37 @@ def ilqr(f, s0, s_goal, N, Q, R, QN, eps=1e-3, max_iters=1000):
 
         # PART (c) ############################################################
         # INSTRUCTIONS: Update `Y`, `y`, `ds`, `du`, `s_bar`, and `u_bar`.
-        raise NotImplementedError()
+        
+        qn = QN @ (s_bar[-1] - s_goal)
+        qk = (s_bar[:-1] - s_goal) @ Q
+        rk = u_bar @ R
+        Abar = np.zeros((N, n, n))
+        P = np.zeros((n, n))
+
+        #backward pass
+        P = QN
+        p = qn
+
+
+        for k in range(N - 1, -1, -1):
+            Y[k] = -np.linalg.inv(R + B[k].T @ P @ B[k]) @ B[k].T @ P @ A[k]
+            y[k] = -np.linalg.inv(R + B[k].T @ P @ B[k]) @ (B[k].T @ p + rk[k])
+            Abar[k] = A[k] + B[k] @ Y[k]
+            p = qk[k] + Abar[k].T @ (p + P @ B[k] @ y[k]) + Y[k].T @ R @ y[k] + Y[k].T @ rk[k]
+            P = Q + Abar[k].T @ P @ Abar[k] + Y[k].T @ R @ Y[k]
+
+
+        #forward pass
+        ds[0] = s0 - s_bar[0]
+        for k in range(N):
+            du[k] = Y[k] @ ds[k] + y[k]
+            s_next = f(s_bar[k] + ds[k], u_bar[k] + du[k])
+            ds[k + 1] = s_next - s_bar[k + 1]
+
+        
+        u_bar += du
+        s_bar += ds
+        
         #######################################################################
 
         if np.max(np.abs(du)) < eps:
@@ -155,7 +186,7 @@ s0 = np.array([0.0, 0.0, 0.0, 0.0])  # initial state
 s_goal = np.array([0.0, np.pi, 0.0, 0.0])  # goal state
 T = 10.0  # simulation time
 dt = 0.1  # sampling time
-animate = False  # flag for animation
+animate = True  # flag for animation
 closed_loop = False  # flag for closed-loop control
 
 # Initialize continuous-time and discretized dynamics
@@ -181,11 +212,10 @@ for k in range(N):
     # INSTRUCTIONS: Compute either the closed-loop or open-loop value of
     # `u[k]`, depending on the Boolean flag `closed_loop`.
     if closed_loop:
-        u[k] = 0.0
-        raise NotImplementedError()
+        u[k] = Y[k] @ (s[k] - s_bar[k]) + y[k] + u_bar[k]
     else:  # do open-loop control
-        u[k] = 0.0
-        raise NotImplementedError()
+        u[k] = u_bar[k]
+
     ###########################################################################
     s[k + 1] = odeint(lambda s, t: f(s, u[k]), s[k], t[k : k + 2])[1]
 print("done! ({:.2f} s)".format(time.time() - start), flush=True)
